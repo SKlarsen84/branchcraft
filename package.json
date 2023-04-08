@@ -1,0 +1,37 @@
+{
+  "name": "createthisbranch",
+  "version": "0.1.0",
+  "description": "An npm package that creates a new git branch, suggests a name, and uses OpenAI's ChatGPT to develop code for the branch.",
+  "main": "cli.ts",
+  "scripts": {
+    "start": "ts-node src/cli.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/createthisbranch.git"
+  },
+  "keywords": [
+    "git",
+    "branch",
+    "openai",
+    "chatgpt",
+    "code-generation"
+  ],
+  "author": "Your Name <youremail@example.com>",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^0.24.0",
+    "dotenv": "^10.0.0",
+    "inquirer": "^8.2.0",
+    "openai": "^3.2.1",
+    "ora": "^6.0.1",
+    "simple-git": "^3.4.0",
+    "ts-node": "^10.4.0",
+    "typescript": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/dotenv": "^8.2.0",
+    "@types/inquirer": "^9.0.3",
+    "@types/node": "^18.15.11"
+  }
+}
