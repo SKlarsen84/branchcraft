@@ -14,11 +14,11 @@ npm install -g branchcraft
 
 ### Configuration
 
-Before using BranchCraft, you need to set your OpenAI API key. You can do this by running the following command:
+The first time you use branchcraft, you will need to configure your OpenAI API key. You will be prompted for the key by the Cli.
+Your API key can be found in your OpenAI account settings.
 
-```bash
-branchcraft config set OPENAI_KEY=<your_key>
-```
+The key is stored by branchraft in your home directory in a file called `.branchcraft`. If you need to change your key, you can do so by editing this file.
+
 
 ### Creating a new branch
 

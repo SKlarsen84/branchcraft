@@ -145,7 +145,7 @@ async function chatGptRequest(prompt: string, apiKey: string, history: { role: s
   })
 
   // Save the entire chat history to a file in the user's home directory with the date and time as the file name
-  const historyPath = `log.createthisbranch.latest.txt`
+  const historyPath = `log.branchcraft.latest.txt`
   await fs.writeFile(historyPath, JSON.stringify(history, null, 2), 'utf-8')
 
   // Replace double backslashes with single backslashes and remove extra quotes
@@ -217,7 +217,7 @@ async function main() {
   await git.checkoutLocalBranch(branchName)
 
   if (!apiKey) {
-    console.error('Error: OPENAI_KEY not set. Please set it using "createthisbranch config set OPENAI_KEY=<your_key>".')
+    console.error('Error: OPENAI_KEY not set.')
     process.exit(1)
   }
 
@@ -246,7 +246,7 @@ async function applyCodeSuggestions(suggestions: any) {
 }
 
 async function getApiKey(): Promise<string> {
-  const configPath = path.join(os.homedir(), '.createthisbranch')
+  const configPath = path.join(os.homedir(), '.branchcraft')
   let apiKey: string
 
   try {
