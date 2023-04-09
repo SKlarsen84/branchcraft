@@ -1,16 +1,13 @@
 #!/usr/bin/env node
 
-import axios from 'axios'
 import inquirer from 'inquirer'
-
 import simpleGit from 'simple-git'
 import { config } from 'dotenv'
-import { join } from 'path'
 import * as os from 'os'
 import * as path from 'path'
-import * as fs from 'fs/promises'
+import { promises as fs } from 'fs'
 import * as readline from 'readline'
-
+import ora from 'ora'
 import { Configuration, OpenAIApi } from 'openai'
 config()
 
@@ -110,7 +107,7 @@ The format of your reply must be this:
 ...
 ]
 
-I need this answer as a JSON string. Make sure it is valid JSON. 
+I need this answer as a JSON string. Make sure it is valid JSON.
 Don't answer with markdown. Don't answer with any sentences such as "Here are the code suggestions"
 
 Your reply should start with a square bracket and end with a square bracket. Nothing else.
@@ -122,6 +119,7 @@ Your reply should start with a square bracket and end with a square bracket. Not
 
   return codeSuggestions
 }
+
 // Updated chatGptRequest function
 async function chatGptRequest(prompt: string, apiKey: string, history: { role: string; content: string }[]) {
   // Add the user's message to the history array
@@ -161,7 +159,9 @@ function extractRequestedFiles(text: string) {
 }
 
 async function main() {
-  console.log('Welcome to Create This Branch!')
+  const welcomeSpinner = ora('Welcome to Create This Branch!').start()
+  await new Promise(resolve => setTimeout(resolve, 1000))
+  welcomeSpinner.stop()
 
   if (!(await isGitRepo())) {
     console.error('Error: The current directory is not a Git repository.')
@@ -217,7 +217,9 @@ async function main() {
     process.exit(0)
   }
 
+  const branchCreationSpinner = ora(`Creating branch "${branchName}"...`).start()
   await git.checkoutLocalBranch(branchName)
+  branchCreationSpinner.succeed(`Branch "${branchName}" created.`)
 
   if (!apiKey) {
     console.error('Error: OPENAI_KEY not set.')
@@ -225,11 +227,16 @@ async function main() {
   }
 
   const repoFiles = await getRepoFiles()
+  const codeSuggestionSpinner = ora('Generating code suggestions...').start()
   const codeSuggestions = await generateBranchCode(repoFiles, apiKey, content, languages, specialInstructions)
+  codeSuggestionSpinner.succeed('Code suggestions generated.')
 
+  const applyCodeSuggestionsSpinner = ora('Applying code suggestions...').start()
   await applyCodeSuggestions(codeSuggestions)
-}
+  applyCodeSuggestionsSpinner.succeed('Code suggestions applied.')
 
+  console.log('Branch setup complete. Happy coding!')
+}
 async function applyCodeSuggestions(suggestions: any) {
   // Iterate through the suggestions and apply them to the corresponding files
   for (const fileSuggestion of suggestions) {
@@ -289,7 +296,6 @@ function readLine(): Promise<string> {
 }
 
 function parseCodeSuggestions(text: string) {
-  console.log('Code suggestions text:', text)
   let jsonText = text
 
   //if the text contains 3 backticks, then it seems chatGPT is returning a code block with the code suggestions - we may need to parse it differently
@@ -318,17 +324,10 @@ function parseCodeSuggestions(text: string) {
 
   // Parse the response
   const codeSuggestions = safelyParseJSON(jsonText)
-  console.log('--------------------- GPT sent the following code suggestions back ---------------------')
-  // Log the code suggestions one by one
-  if (codeSuggestions) {
-    for (const fileSuggestion of codeSuggestions) {
-      console.log(fileSuggestion)
-    }
-  } else {
+  if (!codeSuggestions) {
     console.error('Failed to parse code suggestions.')
   }
 
-  console.log('----------------------------------------------------------------------------------------')
   return codeSuggestions
 }
 
