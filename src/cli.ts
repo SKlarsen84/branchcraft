@@ -290,11 +290,17 @@ function readLine(): Promise<string> {
 
 function parseCodeSuggestions(text: string) {
   console.log('Code suggestions text:', text)
+  let jsonText = text
 
-  const jsonText = extractJSONString(text)
-  if (!jsonText) {
-    console.error('Failed to extract JSON string from the response.')
-    return null
+  //if the text contains 3 backticks, then it seems chatGPT is returning a code block with the code suggestions - we may need to parse it differently
+
+  if (text.includes('```')) {
+    jsonText = extractJSONString(text) as string
+
+    if (!jsonText) {
+      console.error('Failed to extract JSON string from the response.')
+      return null
+    }
   }
 
   // Custom function to safely parse JSON string
