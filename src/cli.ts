@@ -109,9 +109,10 @@ The format of your reply must be this:
 },
 ...
 ]
-The filePath (file name) should be indicative of the contents of the file.
 
-I need this answer as a JSON string. Make sure it is valid JSON. Do NOT include any other text in your reply. Do NOT write things like "here's the suggested code" or "here's the code". Just provide the JSON string with the code suggestions.
+I need this answer as a JSON string. Make sure it is valid JSON. 
+Do NOT include any other text in your reply. Do NOT write things like "here's the suggested code" or "here's the code". 
+Just provide the JSON string with the code suggestions.
 `
 
   const codeSuggestionsText = await chatGptRequest(codeSuggestionsPrompt, apiKey, history)
@@ -133,7 +134,8 @@ async function chatGptRequest(prompt: string, apiKey: string, history: { role: s
 
   const response = await openai.createChatCompletion({
     model: 'gpt-3.5-turbo',
-    messages: history as any
+    messages: history as any,
+    temperature: 0.2
   })
 
   const text = ((response.data.choices[0].message as any).content as string).trim()
