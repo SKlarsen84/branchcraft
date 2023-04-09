@@ -1,5 +1,5 @@
 {
-  "name": "createthisbranch",
+  "name": "branchcraft",
   "version": "0.1.0",
   "description": "An npm package that creates a new git branch, suggests a name, and uses OpenAI's ChatGPT to develop code for the branch.",
   "main": "cli.ts",
@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/createthisbranch.git"
+    "url": "https://github.com/SKlarsen84/branchcraft.git"
   },
   "bin": {
     "branchcraft": "./dist/cli.js"
@@ -21,7 +21,7 @@
     "chatgpt",
     "code-generation"
   ],
-  "author": "Your Name <youremail@example.com>",
+  "author": "Stefan Larsen <leafblow@gmail.com>",
   "license": "MIT",
   "dependencies": {
     "axios": "^0.24.0",
