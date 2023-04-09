@@ -1,6 +1,6 @@
 # BranchCraft
 
-BranchCraft is an interactive CLI tool that streamlines branch creation and code suggestions for Git repositories. Powered by OpenAI's GPT-4, it enhances your development workflow by seamlessly generating new branches with relevant code snippets.
+BranchCraft is an interactive CLI tool that streamlines branch creation and code suggestions for Git repositories. Powered by OpenAI's GPT, it enhances your development workflow by seamlessly generating new branches with relevant code snippets.
 
 ## Installation
 
