@@ -77,7 +77,7 @@ The CLI will guide you through a series of prompts. For example:
 -You: Use Express.js and Passport.js for implementing the login system.
 
 ```
-Based on your input, BranchCraft will use GPT-4 to generate relevant code suggestions for the new branch.
+Based on your input, BranchCraft will use GPT to generate relevant code suggestions for the new branch.
 
 BranchCraft creates the new branch and applies the generated code suggestions
 You can now review the generated code, make any necessary adjustments, and continue working on the new feature.
