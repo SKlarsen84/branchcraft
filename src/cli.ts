@@ -111,8 +111,9 @@ The format of your reply must be this:
 ]
 
 I need this answer as a JSON string. Make sure it is valid JSON. 
-Do NOT include any other text in your reply. Do NOT write things like "here's the suggested code" or "here's the code". 
-Just provide the JSON string with the code suggestions.
+Don't answer with markdown. Don't answer with any sentences such as "Here are the code suggestions"
+
+Your reply should start with a square bracket and end with a square bracket. Nothing else.
 `
 
   const codeSuggestionsText = await chatGptRequest(codeSuggestionsPrompt, apiKey, history)
@@ -326,10 +327,13 @@ function parseCodeSuggestions(text: string) {
 }
 
 function extractJSONString(text: string): string | null {
-  const jsonPattern = /(\{[\s\S]*\}|\[[\s\S]*\])/
-  const match = text.match(jsonPattern)
-
-  return match ? match[0] : null
+  //find content between triple backticks
+  const regex = /```([\s\S]*?)```/gm
+  const matches = regex.exec(text)
+  if (matches && matches.length > 1) {
+    return matches[1]
+  }
+  return null // no match
 }
 
 main()
