@@ -25,7 +25,7 @@ The key is stored by branchraft in your home directory in a file called `.branch
 To create a new branch using BranchCraft, navigate to your Git repository and run the following command:
 
 ```bash
-branchcraft creaste
+branchcraft
 ```
 
 The CLI will prompt you for information about the new branch, such as the type of content it should include, the programming languages the code should be written in, and any special instructions for GPT. Once you provide the necessary information, BranchCraft will generate code suggestions and apply them to the new branch.
