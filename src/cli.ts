@@ -383,7 +383,7 @@
   }
 
   function calculateTokens(text: string) {
-    return Math.ceil(text.length / 2)
+    return Math.ceil(text.length / 3.5)
   }
 
 function trimConversationWithinTokenLimit(conversation: { role: string; content: string }[], tokenLimit: number) {
