@@ -1,10 +1,8 @@
 # BranchCraft
-
 BranchCraft is an interactive CLI tool that streamlines branch creation and code suggestions for Git repositories. Powered by OpenAI's GPT, it enhances your development workflow by seamlessly generating new branches with relevant code snippets.
 With BranchCraft, you can quickly create new branches containing relevant code snippets, making it easier to jumpstart your development process.
 
 ## Installation
-
 To install BranchCraft globally and use it in your own Git repositories, run the following command:
 
 ```bash
@@ -12,6 +10,11 @@ npm install -g branchcraft
 ```
 
 ## Usage
+Just navigate to your Git repository and run the following command:
+
+```bash
+branchcraft
+```
 
 ### Configuration
 
