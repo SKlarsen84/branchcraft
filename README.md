@@ -3,7 +3,7 @@
 BranchCraft is an interactive CLI tool that streamlines branch creation and code suggestions for Git repositories. Powered by OpenAI's GPT, it enhances your development workflow by seamlessly generating new branches with relevant code snippets.
 With BranchCraft, you can quickly create new branches containing relevant code snippets, making it easier to jumpstart your development process.
 
-**Note**: Token length may be an issue for big repositories. If you encounter any issues or have suggestions for improvements, please feel free to contribute by submitting fixes and suggestions on the [project's GitHub repository](https://github.com/yourusername/branchcraft).
+**Note**: Token length may be an issue for big repositories. If you encounter any issues or have suggestions for improvements, please feel free to contribute by submitting fixes and suggestion.
 
 
 ## Installation
