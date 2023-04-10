@@ -24,7 +24,7 @@ async function isGitRepo() {
 
 async function getRepoFiles() {
   const files = await git.raw(['ls-files'])
-  return files.split('\n').filter(file => file.endsWith('.js') || file.endsWith('.ts'))
+  return files.split('\n')
 }
 
 async function generateBranchCode(
