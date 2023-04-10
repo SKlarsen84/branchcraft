@@ -24,7 +24,48 @@ async function isGitRepo() {
 
 async function getRepoFiles() {
   const files = await git.raw(['ls-files'])
-  return files.split('\n')
+
+  //return only files that contain code or markdown
+  const fileEndings = [
+    '.js',
+    '.ts',
+    '.jsx',
+    '.tsx',
+    '.md',
+    '.markdown',
+    '.html',
+    '.css',
+    '.scss',
+    '.sass',
+    '.less',
+    '.py',
+    '.sql',
+    '.cs',
+    '.java',
+    '.go',
+    '.rb',
+    '.php',
+    '.swift',
+    '.kt',
+    '.dart',
+    '.json',
+    '.yaml',
+    '.yml',
+    '.xml',
+    '.toml',
+    '.ini',
+    '.conf',
+    '.config',
+    '.lock',
+    '.sh',
+    '.bat',
+    '.cmd',
+    '.ps1',
+    '.psm1',
+    '.psd1',
+    '.ps1xml'
+  ]
+  return files.split('\n').filter(file => fileEndings.some(ending => file.endsWith(ending)))
 }
 
 async function generateBranchCode(
