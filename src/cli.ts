@@ -209,7 +209,7 @@ function extractRequestedFiles(text: string) {
 }
 
 async function main() {
-  const welcomeSpinner = ora('Welcome to Create This Branch!').start()
+  const welcomeSpinner = ora('This is BranchCraft!').start()
   await new Promise(resolve => setTimeout(resolve, 1000))
   welcomeSpinner.stop()
 
@@ -219,7 +219,7 @@ async function main() {
   }
 
   // Update the getApiKey function call in main()
-  const { apiKey, tokenLimit } = await getApiKey()
+  const { apiKey, tokenLimit } = await getConfigs()
   const { content } = await inquirer.prompt([
     {
       type: 'input',
@@ -312,40 +312,45 @@ async function applyCodeSuggestions(suggestions: any) {
   }
 }
 
-async function getApiKey(): Promise<{ apiKey: string; tokenLimit: number }> {
+async function getConfigs(): Promise<{ apiKey: string; tokenLimit: number }> {
   const configPath = path.join(os.homedir(), '.branchcraft')
   let apiKey: string
-  let tokenLimit = 2048
+  let tokenLimit: number | undefined = undefined
 
   try {
     const configContent = (await fs.readFile(configPath, 'utf-8')).trim()
     const configLines = configContent.split('\n')
     apiKey = configLines.find(line => line.startsWith('OPENAI_KEY='))?.replace('OPENAI_KEY=', '') as string
-    tokenLimit = Number(configLines.find(line => line.startsWith('TOKEN_LIMIT='))?.replace('TOKEN_LIMIT=', ''))
   } catch (err) {
     console.log('No API key found. Please enter your OpenAI API key:')
     apiKey = await readLine()
     await saveApiKey(configPath, apiKey)
   }
 
-  if (!apiKey) {
-    console.log('API key not set. Please enter your OpenAI API key:')
-    apiKey = await readLine()
-    await saveApiKey(configPath, apiKey)
-  }
+  try {
+    const configContent = (await fs.readFile(configPath, 'utf-8')).trim()
+    const configLines = configContent.split('\n')
+    tokenLimit = Number(
+      configLines.find(line => line.startsWith('TOKEN_LIMIT='))?.replace('TOKEN_LIMIT=', '')
+    ) as number
 
-  const { premiumSubscription } = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'premiumSubscription',
-      message:
-        'Do you have a premium OpenAI subscription? (Affects the number of tokens you can use per request.) [yes/no]',
-      default: 'yes'
+    if (tokenLimit !== 2048 && tokenLimit !== 4096) {
+      throw new Error('Invalid token limit')
     }
-  ])
+  } catch (err) {
+    const { premiumSubscription } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'premiumSubscription',
+        message:
+          'Do you have a premium OpenAI subscription? (Affects the number of tokens you can use per request.) [yes/no]',
+        default: 'yes'
+      }
+    ])
 
-  tokenLimit = premiumSubscription === 'yes' ? 4096 : 2048
-  await saveTokenLimit(configPath, tokenLimit)
+    tokenLimit = premiumSubscription === 'yes' ? 4096 : 2048
+    await saveTokenLimit(configPath, tokenLimit)
+  }
 
   // Return both apiKey and tokenLimit
   return { apiKey, tokenLimit }
