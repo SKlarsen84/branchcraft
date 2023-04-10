@@ -1,6 +1,6 @@
 {
   "name": "branchcraft",
-  "version": "1.0.4",
+  "version": "1.0.6",
   "description": "An npm package that creates a new git branch, suggests a name, and uses OpenAI's ChatGPT to develop code for the branch.",
   "main": "cli.ts",
   "type": "module",
@@ -25,7 +25,6 @@
   "author": "Stefan Larsen <leafblow@gmail.com>",
   "license": "MIT",
   "dependencies": {
-    "axios": "^0.24.0",
     "dotenv": "^10.0.0",
     "esm": "^3.2.25",
     "inquirer": "^8.2.0",
