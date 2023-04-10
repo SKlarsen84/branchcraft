@@ -36,7 +36,6 @@ The CLI will prompt you for information about the new branch, such as the type o
 
 
 ### Workflow example:
-
 Here's an example of how you might use BranchCraft in your workflow:
 
 First, install BranchCraft globally by running the following command in your terminal:
