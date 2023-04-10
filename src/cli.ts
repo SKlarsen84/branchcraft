@@ -32,7 +32,8 @@ async function generateBranchCode(
   apiKey: string,
   content: string,
   languages: string,
-  specialInstructions: string
+  specialInstructions: string,
+  tokenLimit: number
 ) {
   const fileContentsPromises = files.map(async file => {
     const content = await fs.readFile(file, 'utf-8')
@@ -69,12 +70,12 @@ Return ONLY a comma separated list of file names that seem like they may be pert
     })
   }
 
-  const fileRequest = await chatGptRequest(initialPrompt, apiKey, history)
+  const fileRequest = await chatGptRequest(initialPrompt, apiKey, history, tokenLimit)
   const requestedFiles = extractRequestedFiles(fileRequest)
   const sendingFilesPrompt = `I am now sending you the content of the requested files. Please inspect them. 
   I will let you know when I am done sending the file contents.`
 
-  await chatGptRequest(sendingFilesPrompt, apiKey, history)
+  await chatGptRequest(sendingFilesPrompt, apiKey, history, tokenLimit)
   for (const requestedFile of requestedFiles.filter(f => f !== 'src/cli.ts')) {
     const fileContent = fileContents.find(({ path }) => path === requestedFile)?.content
     const prompt = `File transmission start
@@ -86,7 +87,7 @@ Return ONLY a comma separated list of file names that seem like they may be pert
     File transmission end. Please reply OK.`
 
     console.log(`Sending file content for ${requestedFile}`)
-    await chatGptRequest(prompt, apiKey, history)
+    await chatGptRequest(prompt, apiKey, history, tokenLimit)
   }
 
   console.log('All file contents sent. Awaiting code suggestions.')
@@ -113,7 +114,7 @@ Don't answer with markdown. Don't answer with any sentences such as "Here are th
 Your reply should start with a square bracket and end with a square bracket. Nothing else.
 `
 
-  const codeSuggestionsText = await chatGptRequest(codeSuggestionsPrompt, apiKey, history)
+  const codeSuggestionsText = await chatGptRequest(codeSuggestionsPrompt, apiKey, history, tokenLimit)
 
   const codeSuggestions = parseCodeSuggestions(codeSuggestionsText)
 
@@ -121,19 +122,27 @@ Your reply should start with a square bracket and end with a square bracket. Not
 }
 
 // Updated chatGptRequest function
-async function chatGptRequest(prompt: string, apiKey: string, history: { role: string; content: string }[]) {
+async function chatGptRequest(
+  prompt: string,
+  apiKey: string,
+  history: { role: string; content: string }[],
+  tokenLimit: number
+) {
   // Add the user's message to the history array
   history.push({
     role: 'user',
     content: prompt
   })
 
+  // Trim the conversation within the token limit before sending it to the API
+  const trimmedHistory = trimConversationWithinTokenLimit(history, tokenLimit - 1)
+
   const configuration = new Configuration({ apiKey })
   const openai = new OpenAIApi(configuration)
 
   const response = await openai.createChatCompletion({
     model: 'gpt-3.5-turbo',
-    messages: history as any,
+    messages: trimmedHistory as any,
     temperature: 0.2
   })
 
@@ -168,8 +177,8 @@ async function main() {
     process.exit(1)
   }
 
-  const apiKey = await getApiKey()
-
+  // Update the getApiKey function call in main()
+  const { apiKey, tokenLimit } = await getApiKey()
   const { content } = await inquirer.prompt([
     {
       type: 'input',
@@ -228,7 +237,14 @@ async function main() {
 
   const repoFiles = await getRepoFiles()
   const codeSuggestionSpinner = ora('Generating code suggestions...').start()
-  const codeSuggestions = await generateBranchCode(repoFiles, apiKey, content, languages, specialInstructions)
+  const codeSuggestions = await generateBranchCode(
+    repoFiles,
+    apiKey,
+    content,
+    languages,
+    specialInstructions,
+    tokenLimit
+  )
   codeSuggestionSpinner.succeed('Code suggestions generated.')
 
   const applyCodeSuggestionsSpinner = ora('Applying code suggestions...').start()
@@ -255,12 +271,16 @@ async function applyCodeSuggestions(suggestions: any) {
   }
 }
 
-async function getApiKey(): Promise<string> {
+async function getApiKey(): Promise<{ apiKey: string; tokenLimit: number }> {
   const configPath = path.join(os.homedir(), '.branchcraft')
   let apiKey: string
+  let tokenLimit = 2048
 
   try {
-    apiKey = (await fs.readFile(configPath, 'utf-8')).trim()
+    const configContent = (await fs.readFile(configPath, 'utf-8')).trim()
+    const configLines = configContent.split('\n')
+    apiKey = configLines.find(line => line.startsWith('OPENAI_KEY='))?.replace('OPENAI_KEY=', '') as string
+    tokenLimit = Number(configLines.find(line => line.startsWith('TOKEN_LIMIT='))?.replace('TOKEN_LIMIT=', ''))
   } catch (err) {
     console.log('No API key found. Please enter your OpenAI API key:')
     apiKey = await readLine()
@@ -272,13 +292,34 @@ async function getApiKey(): Promise<string> {
     apiKey = await readLine()
     await saveApiKey(configPath, apiKey)
   }
-  apiKey = apiKey.replace('OPENAI_KEY=', '')
-  return apiKey
+
+  const { premiumSubscription } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'premiumSubscription',
+      message:
+        'Do you have a premium OpenAI subscription? (Affects the number of tokens you can use per request.) [yes/no]',
+      default: 'yes'
+    }
+  ])
+
+  tokenLimit = premiumSubscription === 'yes' ? 4096 : 2048
+  await saveTokenLimit(configPath, tokenLimit)
+
+  // Return both apiKey and tokenLimit
+  return { apiKey, tokenLimit }
 }
 
 async function saveApiKey(configPath: string, apiKey: string) {
-  await fs.writeFile(configPath, `OPENAI_KEY=${apiKey}`, 'utf-8')
+  const currentContent = await fs.readFile(configPath, 'utf-8').catch(() => '')
+  await fs.writeFile(configPath, `OPENAI_KEY=${apiKey}\n${currentContent}`, 'utf-8')
   console.log('API key saved successfully.')
+}
+
+async function saveTokenLimit(configPath: string, tokenLimit: number) {
+  const currentContent = await fs.readFile(configPath, 'utf-8').catch(() => '')
+  await fs.writeFile(configPath, `TOKEN_LIMIT=${tokenLimit}\n${currentContent}`, 'utf-8')
+  console.log('Token limit saved successfully.')
 }
 
 function readLine(): Promise<string> {
@@ -339,6 +380,35 @@ function extractJSONString(text: string): string | null {
     return matches[1]
   }
   return null // no match
+}
+
+function calculateTokens(text: string) {
+  return Math.ceil(text.length / 4)
+}
+
+function trimConversationWithinTokenLimit(conversation: { role: string; content: string }[], tokenLimit: number) {
+  let currentTokens = 0
+  let startIndex = 0
+
+  // Always include the user's initial content prompt.
+  const initialPrompt = conversation.find(msg => msg.role === 'user')
+  if (initialPrompt) {
+    currentTokens += calculateTokens(initialPrompt.content)
+  }
+
+  for (let i = conversation.length - 1; i >= 0; i--) {
+    const msg = conversation[i]
+    const msgTokens = calculateTokens(msg.content)
+
+    if (currentTokens + msgTokens <= tokenLimit) {
+      currentTokens += msgTokens
+      startIndex = i
+    } else {
+      break
+    }
+  }
+
+  return conversation.slice(startIndex)
 }
 
 main()
