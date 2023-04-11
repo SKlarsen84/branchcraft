@@ -201,16 +201,6 @@ async function chatGptRequest(
 
   const text = ((response.data.choices[0].message as any).content as string).trim()
 
-  // Add the AI's response to the history array
-  history.push({
-    role: 'assistant',
-    content: text
-  })
-
-  // Save the entire chat history to a file in the user's home directory with the date and time as the file name
-  const historyPath = `log.branchcraft.latest.txt`
-  await fs.writeFile(historyPath, JSON.stringify(history, null, 2), 'utf-8')
-
   // Replace double backslashes with single backslashes and remove extra quotes
   return text.replace(/\\/g, '\\').replace(/^"|"$/g, '')
 }
