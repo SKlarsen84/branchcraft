@@ -1,6 +1,6 @@
 {
   "name": "branchcraft",
-  "version": "1.1.23",
+  "version": "1.1.24",
   "description": "An npm package that creates a new git branch, suggests a name, and uses OpenAI's ChatGPT to develop code for the branch.",
   "main": "cli.ts",
   "type": "module",
