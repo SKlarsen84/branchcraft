@@ -8,12 +8,16 @@ Branchcraft natively uses GPT 3.5 turbo. This means that you need a premium Open
 
 
 
+## bugs and issues
 A note on BranchCraft's current state: BranchCraft is currently in beta. It is not yet ready for production use. We are actively working on improving the tool and adding new features. If you have any feedback or suggestions, please feel free to contribute.
 
+
+### token limit exceeded
 For large code bases or repos, you may encounter issues with max token length. Smartly handling large code bases is a high priority, but there's a fine line to be walked in trimming context and preserving necessary context. We're working on it! If you do encounter an error, try adding special instructions to limit the potential scope of what files BranchCraft will look at. For example, if you're working on a React app, you can add the following special instructions to the CLI: "you should only ask me for .tsx files in the /src/pages/home directory". This will limit the scope of the search and hopefully prevent the error from occurring.
 
 
-
+### unparsable code replies (suggestions is not iterable)
+With gpt prompting being what it is, GPT can sometimes generate code that is not valid. This is due to it ignoring the prompt for returning a proper code block as suggestion. IF this happens, please try again and add special instructions to try to steer GPT.
 
 
 ```bash

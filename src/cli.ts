@@ -11,6 +11,10 @@ import ora from 'ora'
 import { Configuration, OpenAIApi } from 'openai'
 config()
 
+function calculateTokens(text: string) {
+  return Math.ceil(text.length / 3.5)
+}
+
 const git = simpleGit()
 
 async function isGitRepo() {
@@ -149,10 +153,7 @@ async function generateBranchCode(
   ...
   ]
 
-  I need this answer as a JSON string. Make sure it is valid JSON.
-  Don't answer with markdown. Don't answer with any sentences such as "Here are the code suggestions"
-
-  Your reply should start with a square bracket and end with a square bracket. Nothing else.
+  I need the answer in a code block. Please do not write any other text in your response.
   `
 
   const codeSuggestionsText = await chatGptRequest(codeSuggestionsPrompt, apiKey, history, tokenLimit)
@@ -169,6 +170,14 @@ async function chatGptRequest(
   history: { role: string; content: string }[],
   tokenLimit: number
 ) {
+  //first, we need to check if the prompt itself would exceed the token limit - if it does, we need to trim it down
+
+  if (calculateTokens(prompt as string) > tokenLimit - 1000) {
+    //if the prompt is too long, we need to trim it down to the token limit
+
+    prompt = trimPromptWithinTokenLimit(prompt, tokenLimit)
+  }
+
   // Add the user's message to the history array
   history.push({
     role: 'user',
@@ -428,10 +437,6 @@ function extractJSONString(text: string): string | null {
   return null // no match
 }
 
-function calculateTokens(text: string) {
-  return Math.ceil(text.length / 3.5)
-}
-
 function trimConversationWithinTokenLimit(conversation: { role: string; content: string }[], tokenLimit: number) {
   let currentTokens = 0
 
@@ -474,3 +479,13 @@ function trimConversationWithinTokenLimit(conversation: { role: string; content:
 }
 
 main()
+function trimPromptWithinTokenLimit(prompt: string, tokenLimit: number) {
+  const promptTokens = calculateTokens(prompt)
+  if (promptTokens <= tokenLimit - 1000) {
+    return prompt
+  } else {
+    //trim the prompt to fit within the token limit
+    const trimmedPrompt = prompt.substring(0, prompt.length - (promptTokens - (tokenLimit - 1000)))
+    return trimmedPrompt
+  }
+}
