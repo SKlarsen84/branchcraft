@@ -117,8 +117,7 @@ async function generateBranchCode(
 
   const fileRequest = await chatGptRequest(initialPrompt, apiKey, history, tokenLimit)
   const requestedFiles = extractRequestedFiles(fileRequest)
-  const sendingFilesPrompt = `I am now sending you the content of the requested files. Please inspect them. 
-    I will let you know when I am done sending the file contents.`
+  const sendingFilesPrompt = `I am now sending you the content of the requested files. Please inspect them. Do NOT reply anything but OK.`
 
   await chatGptRequest(sendingFilesPrompt, apiKey, history, tokenLimit)
   for (const requestedFile of requestedFiles.filter(f => f !== 'src/cli.ts')) {
@@ -129,7 +128,11 @@ async function generateBranchCode(
       File content:
       ${fileContent}
       
-      File transmission end. Please reply OK.`
+
+
+
+      
+      File transmission end. Please reply only with the word OK.`
 
     console.log(`Sending file content for ${requestedFile}`)
     await chatGptRequest(prompt, apiKey, history, tokenLimit)
