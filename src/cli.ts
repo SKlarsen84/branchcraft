@@ -1,76 +1,29 @@
 #!/usr/bin/env node
 
 import inquirer from 'inquirer'
-import simpleGit from 'simple-git'
+
 import { config } from 'dotenv'
-import * as os from 'os'
-import * as path from 'path'
 import { promises as fs } from 'fs'
-import * as readline from 'readline'
 import ora from 'ora'
 import { Configuration, OpenAIApi } from 'openai'
+import { getConfigs } from './config.js'
+import { extractRequestedFiles, parseCodeSuggestions } from './parsers.js'
+import { checkOutBranch, getRepoFiles, isGitRepo } from './git.js'
+import { applyCodeSuggestions } from './fs.js'
+import {
+  initialSystemInstruction,
+  instructionPrompt,
+  featurePrompt,
+  fileListPrompt,
+  fileContentPrompt,
+  getSuggestionsPrompt
+} from './prompts.js'
+
 config()
 
-function calculateTokens(text: string) {
-  return Math.ceil(text.length / 2)
-}
-
-const git = simpleGit()
-
-async function isGitRepo() {
-  try {
-    await git.revparse(['--is-inside-work-tree'])
-    return true
-  } catch (error) {
-    return false
-  }
-}
-
-async function getRepoFiles() {
-  const files = await git.raw(['ls-files'])
-
-  //return only files that contain code or markdown
-  const fileEndings = [
-    '.js',
-    '.ts',
-    '.jsx',
-    '.tsx',
-    '.md',
-    '.markdown',
-    '.html',
-    '.css',
-    '.scss',
-    '.sass',
-    '.less',
-    '.py',
-    '.sql',
-    '.cs',
-    '.java',
-    '.go',
-    '.rb',
-    '.php',
-    '.swift',
-    '.kt',
-    '.dart',
-    '.json',
-    '.yaml',
-    '.yml',
-    '.xml',
-    '.toml',
-    '.ini',
-    '.conf',
-    '.config',
-    '.lock',
-    '.sh',
-    '.bat',
-    '.cmd',
-    '.ps1',
-    '.psm1',
-    '.psd1',
-    '.ps1xml'
-  ]
-  return files.split('\n').filter(file => fileEndings.some(ending => file.endsWith(ending)))
-}
+// Initialize the history array
+let history: { role: string; content: string }[] = []
+let log = ''
 
 async function generateBranchCode(
   files: string[],
@@ -78,7 +31,7 @@ async function generateBranchCode(
   content: string,
   languages: string,
   specialInstructions: string,
-  tokenLimit: number
+  _tokenLimit: number
 ) {
   const fileContentsPromises = files.map(async file => {
     const content = await fs.readFile(file, 'utf-8')
@@ -86,134 +39,98 @@ async function generateBranchCode(
   })
 
   const fileContents = await Promise.all(fileContentsPromises)
-
   const fileList = files.map(path => `- ${path}`).join('\n')
-
-  const initialPrompt = `The user wants to create a new branch that introduces the following feature: "${content}". The current repository has the following existing files:
-
-  ${fileList}
-
-  Return ONLY a comma separated list of file names that seem like they may be pertinent to this new branch. Do not write any other text in your response.
-  `
-
-  // Initialize the history array
-  const history: { role: string; content: string }[] = []
-
-  //set the instructory prompt telling the GPT what role it is playing
 
   history.push({
     role: 'system',
-    content:
-      'You are a helpful AI that will assist the user in providing code suggestions for their project based on their request.'
+    content: initialSystemInstruction
   })
 
   //add any special instructions to the history
   if (specialInstructions) {
     history.push({
       role: 'user',
-      content: 'here are special instructions to consider when fulfilling your work: ' + specialInstructions
+      content: instructionPrompt(specialInstructions)
     })
   }
 
-  const fileRequest = await chatGptRequest(initialPrompt, apiKey, history, tokenLimit)
-  const requestedFiles = extractRequestedFiles(fileRequest)
-  const sendingFilesPrompt = `I am now sending you the content of the requested files. Please inspect them. Do NOT reply anything but OK.`
+  //add the list of files to the history
+  history.push({
+    role: 'user',
+    content: featurePrompt(content)
+  })
 
-  await chatGptRequest(sendingFilesPrompt, apiKey, history, tokenLimit)
-  for (const requestedFile of requestedFiles.filter(f => f !== 'src/cli.ts')) {
+  //add the list of files to the history
+  history.push({
+    role: 'user',
+    content: fileListPrompt(fileList)
+  })
+
+  const gptDesiredFiles = (await chatGptRequest(apiKey, history)).response
+
+  //extract the requested files from the GPT-3 response
+  const requestedFiles = extractRequestedFiles(gptDesiredFiles)
+
+  for (const requestedFile of requestedFiles) {
     const fileContent = fileContents.find(({ path }) => path === requestedFile)?.content
-    const prompt = `File transmission start
-      
-      File name: ${requestedFile}
-      File content:
-      ${fileContent}
-      
 
+    //cut the file content to the first 1000 characters to avoid hitting the API limit
+    const fileContentCut = fileContent?.slice(0, 1000)
 
-
-      
-      File transmission end. Please reply only with the word OK.`
-
-    console.log(`Sending file content for ${requestedFile}`)
-    await chatGptRequest(prompt, apiKey, history, tokenLimit)
+    const prompt = fileContentPrompt(requestedFile, fileContentCut || 'file not found')
+    //simply add the file content to the history
+    history.push({
+      role: 'user',
+      content: prompt
+    })
   }
 
-  console.log('All file contents sent. Awaiting code suggestions.')
+  //at this point remove the file list entry from the history as it is no longer needed
+  history = history.filter(entry => !entry.content.includes('The repository contains the following files'))
 
-  const codeSuggestionsPrompt = `You have received all the requested file contents. Please provide the code suggestions for adding functionality described here:
+  const codeSuggestionsPrompt = getSuggestionsPrompt(content, languages)
 
-  ${content}
+  //add the code suggestions prompt to the history
+  history.push({
+    role: 'user',
+    content: codeSuggestionsPrompt
+  })
 
-  The code should be written in the following language(s): ${languages}.
+  const codeSuggestionsText = await chatGptRequest(apiKey, history)
 
-  The format of your reply must be this:
+  const codeSuggestions = parseCodeSuggestions(codeSuggestionsText.response)
 
-  [
-  {
-  "filePath": "./file.ext",
-  "fileContent": "file content here"
-  },
-  ...
-  ]
+  //save the entire conversation to the log variable
 
-  I need the answer in a code block. Please do not write any other text in your response.
-  `
+  log = history.map(entry => entry.content).join('\n')
+  log += '\n\n' + codeSuggestionsText.response
 
-  const codeSuggestionsText = await chatGptRequest(codeSuggestionsPrompt, apiKey, history, tokenLimit)
-
-  const codeSuggestions = parseCodeSuggestions(codeSuggestionsText)
-
+  //also add a line showing which files were requested
+  log += `\n\nRequested files: ${requestedFiles.join(', ')}`
+  //save log to disk
+  await fs.writeFile('log.txt', log, 'utf-8')
   return codeSuggestions
 }
 
 // Updated chatGptRequest function
-async function chatGptRequest(
-  prompt: string,
-  apiKey: string,
-  history: { role: string; content: string }[],
-  tokenLimit: number
-) {
-  //first, we need to check if the prompt itself would exceed the token limit - if it does, we need to trim it down
-
-  if (calculateTokens(prompt as string) > tokenLimit - 1000) {
-    //if the prompt is too long, we need to trim it down to the token limit
-
-    prompt = trimPromptWithinTokenLimit(prompt, tokenLimit)
-  }
-
-  // Add the user's message to the history array
-  history.push({
-    role: 'user',
-    content: prompt
-  })
-
-  // Trim the conversation within the token limit before sending it to the API
-  const trimmedHistory = trimConversationWithinTokenLimit(history, tokenLimit - 1)
-
+async function chatGptRequest(apiKey: string, history: { role: string; content: string }[]) {
   const configuration = new Configuration({ apiKey })
   const openai = new OpenAIApi(configuration)
 
   const response = await openai.createChatCompletion({
     model: 'gpt-3.5-turbo',
-    messages: trimmedHistory as any,
-    temperature: 0.2
+    messages: history as any,
+
+    temperature: 0.5
   })
 
   const text = ((response.data.choices[0].message as any).content as string).trim()
 
-  // Save the entire chat history to a file in the user's home directory with the date and time as the file name
-  const historyPath = `log.branchcraft.latest.txt`
-  await fs.writeFile(historyPath, JSON.stringify(history, null, 2), 'utf-8')
-
   // Replace double backslashes with single backslashes and remove extra quotes
-  return text.replace(/\\/g, '\\').replace(/^"|"$/g, '')
-}
-function extractRequestedFiles(text: string) {
-  const files = text.split(',').map(file => file.trim())
-
-  return files
+  return { response: text.replace(/\\/g, '\\').replace(/^"|"$/g, '') }
 }
 
+// Updated main function
 async function main() {
   const welcomeSpinner = ora('This is BranchCraft!').start()
   await new Promise(resolve => setTimeout(resolve, 1000))
@@ -274,7 +191,7 @@ async function main() {
   }
 
   const branchCreationSpinner = ora(`Creating branch "${branchName}"...`).start()
-  await git.checkoutLocalBranch(branchName)
+  await checkOutBranch(branchName)
   branchCreationSpinner.succeed(`Branch "${branchName}" created.`)
 
   if (!apiKey) {
@@ -295,207 +212,18 @@ async function main() {
   codeSuggestionSpinner.succeed('Code suggestions generated.')
 
   const applyCodeSuggestionsSpinner = ora('Applying code suggestions...').start()
-  await applyCodeSuggestions(codeSuggestions)
-  applyCodeSuggestionsSpinner.succeed('Code suggestions applied.')
+
+  try {
+    await applyCodeSuggestions(codeSuggestions)
+  } catch (e) {
+    applyCodeSuggestionsSpinner.fail('Code suggestions could not be applied.')
+    console.error('This usually happens if chatGPT fails to return a properly formatted response. Please try again.')
+    process.exit(1)
+  }
 
   console.log('Branch setup complete. Happy coding!')
-}
-async function applyCodeSuggestions(suggestions: any) {
-  // Iterate through the suggestions and apply them to the corresponding files
-  for (const fileSuggestion of suggestions) {
-    const { filePath, fileContent } = fileSuggestion
-
-    if (fileContent) {
-      // Ensure the directory exists before writing the file
-      const dirPath = path.dirname(filePath)
-      await fs.mkdir(dirPath, { recursive: true })
-
-      console.log(`Writing file ${filePath}`)
-      await fs.writeFile(filePath, fileContent, 'utf-8')
-    } else {
-      console.error(`Error: No file content received for ${filePath}`)
-    }
-  }
-}
-
-async function getConfigs(): Promise<{ apiKey: string; tokenLimit: number }> {
-  const configPath = path.join(os.homedir(), '.branchcraft')
-  let apiKey: string
-  let tokenLimit: number | undefined = undefined
-
-  try {
-    const configContent = (await fs.readFile(configPath, 'utf-8')).trim()
-    const configLines = configContent.split('\n')
-    apiKey = configLines.find(line => line.startsWith('OPENAI_KEY='))?.replace('OPENAI_KEY=', '') as string
-  } catch (err) {
-    console.log('No API key found. Please enter your OpenAI API key:')
-    apiKey = await readLine()
-    await saveApiKey(configPath, apiKey)
-  }
-
-  try {
-    const configContent = (await fs.readFile(configPath, 'utf-8')).trim()
-    const configLines = configContent.split('\n')
-    tokenLimit = Number(
-      configLines.find(line => line.startsWith('TOKEN_LIMIT='))?.replace('TOKEN_LIMIT=', '')
-    ) as number
-
-    if (tokenLimit !== 2048 && tokenLimit !== 4096) {
-      throw new Error('Invalid token limit')
-    }
-  } catch (err) {
-    const { premiumSubscription } = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'premiumSubscription',
-        message:
-          'Do you have a premium OpenAI subscription? (Affects the number of tokens you can use per request.) [yes/no]',
-        default: 'yes'
-      }
-    ])
-
-    tokenLimit = premiumSubscription === 'yes' ? 4096 : 2048
-    await saveTokenLimit(configPath, tokenLimit)
-  }
-
-  // Return both apiKey and tokenLimit
-  return { apiKey, tokenLimit }
-}
-
-async function saveApiKey(configPath: string, apiKey: string) {
-  const currentContent = await fs.readFile(configPath, 'utf-8').catch(() => '')
-  await fs.writeFile(configPath, `OPENAI_KEY=${apiKey}\n${currentContent}`, 'utf-8')
-  console.log('API key saved successfully.')
-}
-
-async function saveTokenLimit(configPath: string, tokenLimit: number) {
-  const currentContent = await fs.readFile(configPath, 'utf-8').catch(() => '')
-  await fs.writeFile(configPath, `TOKEN_LIMIT=${tokenLimit}\n${currentContent}`, 'utf-8')
-  console.log('Token limit saved successfully.')
-}
-
-function readLine(): Promise<string> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  })
-
-  return new Promise(resolve => {
-    rl.question('', answer => {
-      rl.close()
-      resolve(answer.trim())
-    })
-  })
-}
-
-function parseCodeSuggestions(text: string) {
-  let jsonText = text
-
-  //if the text contains 3 backticks, then it seems chatGPT is returning a code block with the code suggestions - we may need to parse it differently
-
-  if (text.includes('```')) {
-    jsonText = extractJSONString(text) as string
-
-    if (!jsonText) {
-      console.error('Failed to extract JSON string from the response.')
-      return null
-    }
-  }
-
-  // Custom function to safely parse JSON string
-  const safelyParseJSON = (jsonString: string): any => {
-    try {
-      const parsed = JSON.parse(jsonString)
-      if (parsed && typeof parsed === 'object') {
-        return parsed
-      }
-    } catch (e) {
-      console.error('Error parsing JSON:', e)
-    }
-    return null
-  }
-
-  // Parse the response
-  const codeSuggestions = safelyParseJSON(jsonText)
-  if (!codeSuggestions) {
-    console.error('Failed to parse code suggestions.')
-  }
-
-  return codeSuggestions
-}
-
-function extractJSONString(text: string): string | null {
-  //find content between triple backticks
-  const regex = /```([\s\S]*?)```/gm
-  const matches = regex.exec(text)
-  if (matches && matches.length > 1) {
-    return matches[1]
-  }
-  return null // no match
-}
-
-function trimConversationWithinTokenLimit(conversation: { role: string; content: string }[], tokenLimit: number) {
-  let currentTokens = 0
-
-  // Calculate the total tokens in the conversation
-  for (const msg of conversation) {
-    currentTokens += calculateTokens(msg.content)
-  }
-
-  // If the conversation is already within the token limit, return it as is
-  if (currentTokens <= tokenLimit) {
-    return conversation
-  }
-
-  // Always include the user's initial content prompt.
-  const initialPrompt = conversation.find(msg => msg.role === 'user')
-  if (initialPrompt) {
-    currentTokens = calculateTokens(initialPrompt.content)
-  }
-
-  //if the initial prompt is too long, then we need to trim it - but only if additional user messages are present after it
-  if (currentTokens > tokenLimit && conversation.length > 2) {
-    //trim the initial prompt by removing everything after (and including) the sentence "The current repository has the following existing files"
-    const initialPromptIndex = conversation.findIndex(msg => msg.role === 'user')
-    const initialPromptContent = conversation[initialPromptIndex].content
-    const indexOfSentence = initialPromptContent.indexOf('The current repository has the following existing files')
-    if (indexOfSentence > 0) {
-      const newInitialPromptContent = initialPromptContent.substring(0, indexOfSentence)
-      conversation[initialPromptIndex].content = newInitialPromptContent
-      currentTokens = calculateTokens(newInitialPromptContent)
-    }
-  }
-
-  // Remove messages from the conversation until it fits within the token limit
-  const trimmedConversation = initialPrompt ? [initialPrompt] : []
-  for (let i = conversation.length - 1; i >= 0; i--) {
-    const msg = conversation[i]
-    const msgTokens = calculateTokens(msg.content)
-
-    if (currentTokens + msgTokens <= tokenLimit) {
-      currentTokens += msgTokens
-      trimmedConversation.unshift(msg)
-    } else {
-      // Check if removing the message will bring the conversation within the token limit
-      const potentialTokens = currentTokens - msgTokens
-      if (potentialTokens <= tokenLimit) {
-        // If removing the message brings the conversation within the token limit, remove it
-        currentTokens = potentialTokens
-      }
-    }
-  }
-
-  return trimmedConversation
+  ora('You can view the full conversation log in the log.txt file.').start()
+  process.exit(0)
 }
 
 main()
-function trimPromptWithinTokenLimit(prompt: string, tokenLimit: number) {
-  const promptTokens = calculateTokens(prompt)
-  if (promptTokens <= tokenLimit - 1000) {
-    return prompt
-  } else {
-    //trim the prompt to fit within the token limit
-    const trimmedPrompt = prompt.substring(0, prompt.length - (promptTokens - (tokenLimit - 1000)))
-    return trimmedPrompt
-  }
-}
