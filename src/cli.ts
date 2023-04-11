@@ -12,7 +12,7 @@ import { Configuration, OpenAIApi } from 'openai'
 config()
 
 function calculateTokens(text: string) {
-  return Math.ceil(text.length / 3.5)
+  return Math.ceil(text.length / 2)
 }
 
 const git = simpleGit()
@@ -454,6 +454,19 @@ function trimConversationWithinTokenLimit(conversation: { role: string; content:
   const initialPrompt = conversation.find(msg => msg.role === 'user')
   if (initialPrompt) {
     currentTokens = calculateTokens(initialPrompt.content)
+  }
+
+  //if the initial prompt is too long, then we need to trim it - but only if additional user messages are present after it
+  if (currentTokens > tokenLimit && conversation.length > 2) {
+    //trim the initial prompt by removing everything after (and including) the sentence "The current repository has the following existing files"
+    const initialPromptIndex = conversation.findIndex(msg => msg.role === 'user')
+    const initialPromptContent = conversation[initialPromptIndex].content
+    const indexOfSentence = initialPromptContent.indexOf('The current repository has the following existing files')
+    if (indexOfSentence > 0) {
+      const newInitialPromptContent = initialPromptContent.substring(0, indexOfSentence)
+      conversation[initialPromptIndex].content = newInitialPromptContent
+      currentTokens = calculateTokens(newInitialPromptContent)
+    }
   }
 
   // Remove messages from the conversation until it fits within the token limit
