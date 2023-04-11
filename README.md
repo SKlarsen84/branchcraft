@@ -2,6 +2,8 @@
 BranchCraft is an interactive CLI tool that streamlines branch creation and code suggestions for Git repositories. Powered by OpenAI's GPT, it enhances your development workflow by seamlessly generating new branches with relevant code snippets.
 With BranchCraft, you can quickly create new branches containing relevant code snippets, making it easier to jumpstart your development process.
 
+** note that this is a beta package. It may be buggy and is not yet ready for production use. You may (probably will) experience buggy behavior. ** 
+
 
 ## using GPT 3.5 turbo
 Branchcraft natively uses GPT 3.5 turbo. This means that you need a premium OpenAI account to use BranchCraft. If you don't have a premium account, you can sign up for one [here](https://beta.openai.com/signup). Support for the free model is coming soon.
