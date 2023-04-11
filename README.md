@@ -7,7 +7,6 @@ With BranchCraft, you can quickly create new branches containing relevant code s
 Branchcraft natively uses GPT 3.5 turbo. This means that you need a premium OpenAI account to use BranchCraft. If you don't have a premium account, you can sign up for one [here](https://beta.openai.com/signup). Support for the free model is coming soon.
 
 
-
 ## bugs and issues
 A note on BranchCraft's current state: BranchCraft is currently in beta. It is not yet ready for production use. We are actively working on improving the tool and adding new features. If you have any feedback or suggestions, please feel free to contribute.
 
@@ -19,8 +18,6 @@ For large code bases or repos, you may encounter issues with max token length. S
 ### unparsable code replies (suggestions is not iterable)
 With gpt prompting being what it is, GPT can sometimes generate code that is not valid. This is due to it ignoring the prompt for returning a proper code block as suggestion. IF this happens, please try again and add special instructions to try to steer GPT.
 
-
-```bash
 
 ## Installation
 To install BranchCraft globally and use it in your own Git repositories, run the following command:
