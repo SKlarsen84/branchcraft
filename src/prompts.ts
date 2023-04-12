@@ -4,7 +4,9 @@ ${list}.
 
 Please reply only with a non formatted comma separeted list of the files you deem interesting for the task`
 
-const initialSystemInstruction = `You are a helpful AI that will assist the user in providing code suggestions for their project based on their request.`
+const initialSystemInstruction = `You are a code block producer assistant. 
+The user will ask you to return code and replies in specific formats and you will comply.
+ You will not write any additional flavour text beyond what is requested`
 
 const instructionPrompt = (instructions: string) =>
   `The user has provided the following special instructions: ${instructions}`

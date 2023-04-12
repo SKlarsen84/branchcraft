@@ -3,6 +3,7 @@
 import inquirer from 'inquirer'
 
 import { config } from 'dotenv'
+import { encode, decode } from 'gpt-3-encoder'
 import { promises as fs } from 'fs'
 import ora from 'ora'
 import { Configuration, OpenAIApi } from 'openai'
@@ -70,19 +71,49 @@ async function generateBranchCode(
 
   //extract the requested files from the GPT-3 response
   const requestedFiles = extractRequestedFiles(gptDesiredFiles)
+  console.log('GPT-3 asked to see the following files: ' + requestedFiles)
 
   for (const requestedFile of requestedFiles) {
     const fileContent = fileContents.find(({ path }) => path === requestedFile)?.content
 
-    //cut the file content to the first 1000 characters to avoid hitting the API limit
-    const fileContentCut = fileContent?.slice(0, 1000)
+    //use gpt3-encode to encode the file content and check the token length
+    const encodedFileContent = await encode(fileContent as string)
 
-    const prompt = fileContentPrompt(requestedFile, fileContentCut || 'file not found')
-    //simply add the file content to the history
-    history.push({
-      role: 'user',
-      content: prompt
-    })
+    const { cut } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'cut',
+        default: true,
+        message: `We need to cut the content of the file ${requestedFile} to fit the token limit. Do you want to proceed?`
+      }
+    ])
+
+    if (cut) {
+      //if the user wants to cut, we need to send the file content to GPT-3 and query it for the individual function blocks.
+      const fileContentCut = await cutFileContent(apiKey, fileContent as string)
+
+      //present the user with the relevant cut blocks and ask them to select the ones they want to send
+
+      const { selectedBlocks } = await inquirer.prompt([
+        {
+          type: 'checkbox',
+          name: 'selectedBlocks',
+          message: `Selected relevant blocks from ${requestedFile}`,
+          choices: fileContentCut.map((block, index) => ({
+            name: block.substring(0, 50),
+            value: index
+          }))
+        }
+      ])
+
+      //add the selected blocks to the history
+      for (const selectedBlock of selectedBlocks) {
+        history.push({
+          role: 'user',
+          content: 'code block from ' + requestedFile + ':\n' + fileContentCut[selectedBlock]
+        })
+      }
+    }
   }
 
   //at this point remove the file list entry from the history as it is no longer needed
@@ -200,7 +231,7 @@ async function main() {
   }
 
   const repoFiles = await getRepoFiles()
-  const codeSuggestionSpinner = ora('Generating code suggestions...').start()
+  //const codeSuggestionSpinner = ora('Generating code suggestions...').start()
   const codeSuggestions = await generateBranchCode(
     repoFiles,
     apiKey,
@@ -209,7 +240,7 @@ async function main() {
     specialInstructions,
     tokenLimit
   )
-  codeSuggestionSpinner.succeed('Code suggestions generated.')
+  //codeSuggestionSpinner.succeed('Code suggestions generated.')
 
   const applyCodeSuggestionsSpinner = ora('Applying code suggestions...').start()
 
@@ -227,3 +258,45 @@ async function main() {
 }
 
 main()
+
+const cutFileContent = async (apiKey: string, fileContent: string) => {
+  //send the file content to GPT-3 and query it for the individual function blocks.
+  const { response } = await chatGptRequest(apiKey, [
+    {
+      role: 'system',
+      content:
+        'You are a code block extractor. The user sends you code in a string and you return each function or section you identify as a separate code block.'
+    },
+    {
+      role: 'user',
+      content:
+        'I will now send you a file. Please use your best judgment to split it into meaningful chunks. If it is code, return each function as a block. If it is markdown, return each section as a code block.'
+    },
+    { role: 'assistant', content: 'OK' },
+    { role: 'user', content: fileContent }
+  ])
+
+  //parse the response into an array of code blocks
+  const codeBlocks = parseCodeBlocks(response) as string[]
+  console.log(response)
+
+  //build a map that shows the first 25 characters of each code block
+  const codeBlockMap = codeBlocks.map((block, index) => `${index + 1}. ${block.slice(0, 100)}`)
+
+  return codeBlocks
+}
+
+const parseCodeBlocks = (response: string) => {
+  //every code block is encapsulated by three backticks - we use a regex to find all of them
+
+  const codeBlockRegex = /```[\s\S]*?```/g
+  const codeBlocks = response.match(codeBlockRegex)
+
+  //if no code blocks were found, return an empty array
+  if (!codeBlocks) {
+    return []
+  }
+
+  //remove the three backticks from the start and end of each code block
+  return codeBlocks.map(block => block.slice(3, -3))
+}

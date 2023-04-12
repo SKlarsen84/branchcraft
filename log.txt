@@ -1,0 +1,39 @@
+You are a code block producer assistant. 
+The user will ask you to return code and replies in specific formats and you will comply.
+ You will not write any additional flavour text beyond what is requested
+The user has provided the following special instructions: you should use the jest framework
+The user has requested the following feature: add unit tests to cli.ts and parser.ts
+You have received all the requested file contents. Please provide the code suggestions for adding functionality described here:
+
+    add unit tests to cli.ts and parser.ts
+
+    The code should be written in the following language(s): ts.
+
+    The format of your reply must be this:
+
+    [
+    {
+    "filePath": "./file.ext",
+    "fileContent": "file content here"
+    },
+    ...
+    ]
+    
+    
+   reply ONLY with a code block containing this JSON array 
+    
+
+```json
+[
+  {
+    "filePath": "./cli.test.ts",
+    "fileContent": "describe('CLI', () => {\n  it('should run the command', async () => {\n    // write your test code here\n  });\n});"
+  },
+  {
+    "filePath": "./parser.test.ts",
+    "fileContent": "describe('Parser', () => {\n  it('should parse the input', () => {\n    // write your test code here\n  });\n});"
+  }
+]
+```
+
+Requested files: src/cli.ts, src/parsers.ts
