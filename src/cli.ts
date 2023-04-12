@@ -3,7 +3,7 @@
 import inquirer from 'inquirer'
 
 import { config } from 'dotenv'
-import { encode, decode } from 'gpt-3-encoder'
+import { encode } from 'gpt-3-encoder'
 import { promises as fs } from 'fs'
 import ora from 'ora'
 import { Configuration, OpenAIApi } from 'openai'
@@ -16,7 +16,6 @@ import {
   instructionPrompt,
   featurePrompt,
   fileListPrompt,
-  fileContentPrompt,
   getSuggestionsPrompt
 } from './prompts.js'
 
@@ -93,14 +92,13 @@ async function generateBranchCode(
       const fileContentCut = await cutFileContent(apiKey, fileContent as string)
 
       //present the user with the relevant cut blocks and ask them to select the ones they want to send
-
       const { selectedBlocks } = await inquirer.prompt([
         {
           type: 'checkbox',
           name: 'selectedBlocks',
           message: `Selected relevant blocks from ${requestedFile}`,
           choices: fileContentCut.map((block, index) => ({
-            name: block.substring(0, 50),
+            name: getFunctionName(block),
             value: index
           }))
         }
@@ -265,7 +263,7 @@ const cutFileContent = async (apiKey: string, fileContent: string) => {
     {
       role: 'system',
       content:
-        'You are a code block extractor. The user sends you code in a string and you return each function or section you identify as a separate code block.'
+        'You are a code block extractor. The user sends you code or markdown in a string and you return each function or section you identify as a separate code block.'
     },
     {
       role: 'user',
@@ -278,11 +276,6 @@ const cutFileContent = async (apiKey: string, fileContent: string) => {
 
   //parse the response into an array of code blocks
   const codeBlocks = parseCodeBlocks(response) as string[]
-  console.log(response)
-
-  //build a map that shows the first 25 characters of each code block
-  const codeBlockMap = codeBlocks.map((block, index) => `${index + 1}. ${block.slice(0, 100)}`)
-
   return codeBlocks
 }
 
@@ -297,6 +290,27 @@ const parseCodeBlocks = (response: string) => {
     return []
   }
 
-  //remove the three backticks from the start and end of each code block
-  return codeBlocks.map(block => block.slice(3, -3))
+  //remove the three backticks from the start and end of each code block - also remove the first line of each code block
+  let blocks = codeBlocks.map(block => block.slice(3, -3)).map(block => block.split('\n').slice(1).join('\n'))
+
+  return blocks
+}
+
+//function to try and find the function name via regex - if it fails, return the first line of the function
+const getFunctionName = (codeBlock: string) => {
+  //regex to find line up until the first opening parenthesis
+  const functionNameRegex = /.*?(?=\()/g
+  const functionName = codeBlock.match(functionNameRegex)
+
+  //if the regex failed, return the first line of the function
+  if (!functionName) {
+    return codeBlock.split('\n')[0]
+  }
+
+  //if there's an equal sign in the function name, it's an arrow function. Clean it up.
+  if (functionName[0].includes('=')) {
+    return functionName[0].split('=')[0].trim()
+  }
+
+  return functionName[0]
 }
