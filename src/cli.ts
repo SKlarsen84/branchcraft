@@ -274,6 +274,7 @@ const cutFileContent = async (apiKey: string, fileContent: string) => {
     { role: 'user', content: fileContent }
   ])
 
+  console.log(response)
   //parse the response into an array of code blocks
   const codeBlocks = parseCodeBlocks(response) as string[]
   return codeBlocks
