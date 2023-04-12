@@ -70,46 +70,51 @@ async function generateBranchCode(
 
   //extract the requested files from the GPT-3 response
   const requestedFiles = extractRequestedFiles(gptDesiredFiles)
-  console.log(`GPT requested the following files: 
-  
-  ${requestedFiles.join('\n ')}`)
 
-  for (const requestedFile of requestedFiles) {
-    const fileContent = fileContents.find(({ path }) => path === requestedFile)?.content
+  //prompt the user in a checkbox list to select the files they want to send to GPT-3 from the list of requested files
 
-    const { cut } = await inquirer.prompt([
+  const { selectedFiles } = await inquirer.prompt([
+    {
+      type: 'checkbox',
+      name: 'selectedFiles',
+      message: 'GPT has requested the following files. Select the ones you deem relevant.',
+      choices: requestedFiles.map(file => ({
+        name: file,
+        value: file
+      }))
+    }
+  ])
+
+  for (const file of selectedFiles) {
+    const fileContent = fileContents.find(({ path }) => path === file)?.content
+
+    //use gpt3-encode to encode the file content and check the token length
+    const encodedFileContent = await encode(fileContent as string)
+
+    //ora spinner to show the user that the file is being cut
+    const cutSpinner = ora(`Analyzing ${file}`).start()
+    const fileContentCut = await cutFileContent(apiKey, fileContent as string)
+    cutSpinner.stop()
+
+    //present the user with the relevant cut blocks and ask them to select the ones they want to send
+    const { selectedBlocks } = await inquirer.prompt([
       {
-        type: 'confirm',
-        name: 'cut',
-        default: true,
-        message: `Branchcraft has asked for the file ${requestedFile}. Branchcraft will cut it into smaller blocks and you will be given the option to send those chunks you deem relevant.`
+        type: 'checkbox',
+        name: 'selectedBlocks',
+        message: `Selected relevant blocks from ${file}`,
+        choices: fileContentCut.map((block, index) => ({
+          name: getFunctionName(block),
+          value: index
+        }))
       }
     ])
 
-    if (cut) {
-      //if the user wants to cut, we need to send the file content to GPT-3 and query it for the individual function blocks.
-      const fileContentCut = await cutFileContent(apiKey, fileContent as string)
-
-      //present the user with the relevant cut blocks and ask them to select the ones they want to send
-      const { selectedBlocks } = await inquirer.prompt([
-        {
-          type: 'checkbox',
-          name: 'selectedBlocks',
-          message: `Selected relevant blocks from ${requestedFile}`,
-          choices: fileContentCut.map((block, index) => ({
-            name: getFunctionName(block),
-            value: index
-          }))
-        }
-      ])
-
-      //add the selected blocks to the history
-      for (const selectedBlock of selectedBlocks) {
-        history.push({
-          role: 'user',
-          content: 'code block from ' + requestedFile + ':\n' + fileContentCut[selectedBlock]
-        })
-      }
+    //add the selected blocks to the history
+    for (const selectedBlock of selectedBlocks) {
+      history.push({
+        role: 'user',
+        content: 'code block from ' + file + ':\n' + fileContentCut[selectedBlock]
+      })
     }
 
     //if the user doesn't want to cut, we just send the entire file content to GPT
