@@ -70,20 +70,19 @@ async function generateBranchCode(
 
   //extract the requested files from the GPT-3 response
   const requestedFiles = extractRequestedFiles(gptDesiredFiles)
-  console.log('GPT-3 asked to see the following files: ' + requestedFiles)
+  console.log(`GPT requested the following files: 
+  
+  ${requestedFiles.join('\n ')}`)
 
   for (const requestedFile of requestedFiles) {
     const fileContent = fileContents.find(({ path }) => path === requestedFile)?.content
-
-    //use gpt3-encode to encode the file content and check the token length
-    const encodedFileContent = await encode(fileContent as string)
 
     const { cut } = await inquirer.prompt([
       {
         type: 'confirm',
         name: 'cut',
         default: true,
-        message: `We need to cut the content of the file ${requestedFile} to fit the token limit. Do you want to proceed?`
+        message: `Branchcraft has asked for the file ${requestedFile}. Branchcraft will cut it into smaller blocks and you will be given the option to send those chunks you deem relevant.`
       }
     ])
 
@@ -112,6 +111,8 @@ async function generateBranchCode(
         })
       }
     }
+
+    //if the user doesn't want to cut, we just send the entire file content to GPT
   }
 
   //at this point remove the file list entry from the history as it is no longer needed
@@ -274,7 +275,6 @@ const cutFileContent = async (apiKey: string, fileContent: string) => {
     { role: 'user', content: fileContent }
   ])
 
-  console.log(response)
   //parse the response into an array of code blocks
   const codeBlocks = parseCodeBlocks(response) as string[]
   return codeBlocks
