@@ -8,7 +8,7 @@ import { promises as fs } from 'fs'
 import ora from 'ora'
 import { Configuration, OpenAIApi } from 'openai'
 import { getConfigs } from './config.js'
-import { extractRequestedFiles, parseCodeSuggestions } from './parsers.js'
+import { cutFileContent, extractRequestedFiles, getFunctionName, parseCodeSuggestions } from './parsers.js'
 import { checkOutBranch, getRepoFiles, isGitRepo } from './git.js'
 import { applyCodeSuggestions } from './fs.js'
 import {
@@ -18,6 +18,7 @@ import {
   fileListPrompt,
   getSuggestionsPrompt
 } from './prompts.js'
+import { calculateTokens } from './tokens.js'
 
 config()
 
@@ -88,9 +89,6 @@ async function generateBranchCode(
   for (const file of selectedFiles) {
     const fileContent = fileContents.find(({ path }) => path === file)?.content
 
-    //use gpt3-encode to encode the file content and check the token length
-    const encodedFileContent = await encode(fileContent as string)
-
     //ora spinner to show the user that the file is being cut
     const cutSpinner = ora(`Analyzing ${file}`).start()
     const fileContentCut = await cutFileContent(apiKey, fileContent as string)
@@ -101,7 +99,7 @@ async function generateBranchCode(
       {
         type: 'checkbox',
         name: 'selectedBlocks',
-        message: `Selected relevant blocks from ${file}`,
+        message: `Select relevant blocks from ${file}`,
         choices: fileContentCut.map((block, index) => ({
           name: getFunctionName(block),
           value: index
@@ -131,26 +129,37 @@ async function generateBranchCode(
     content: codeSuggestionsPrompt
   })
 
+  const getSuggestionsSpinner = ora('Generating code suggestions...').start()
   const codeSuggestionsText = await chatGptRequest(apiKey, history)
+  getSuggestionsSpinner.stop()
 
-  const codeSuggestions = parseCodeSuggestions(codeSuggestionsText.response)
+  try {
+    const codeSuggestions = parseCodeSuggestions(codeSuggestionsText.response)
 
-  //save the entire conversation to the log variable
+    //save the entire conversation to the log variable
 
-  log = history.map(entry => entry.content).join('\n')
-  log += '\n\n' + codeSuggestionsText.response
+    log = history.map(entry => entry.content).join('\n')
+    log += '\n\n' + codeSuggestionsText.response
 
-  //also add a line showing which files were requested
-  log += `\n\nRequested files: ${requestedFiles.join(', ')}`
-  //save log to disk
-  await fs.writeFile('log.txt', log, 'utf-8')
-  return codeSuggestions
+    //also add a line showing which files were requested
+    log += `\n\nRequested files: ${requestedFiles.join(', ')}`
+    //save log to disk
+    await fs.writeFile('log.txt', log, 'utf-8')
+    return codeSuggestions
+  } catch (e) {
+    console.error('Error: GPT return a code suggestion respopnse that could not be parsed.')
+    console.log('GPT response:')
+    console.log(codeSuggestionsText.response)
+    process.exit(1)
+  }
 }
 
 // Updated chatGptRequest function
-async function chatGptRequest(apiKey: string, history: { role: string; content: string }[]) {
+export async function chatGptRequest(apiKey: string, history: { role: string; content: string }[]) {
   const configuration = new Configuration({ apiKey })
   const openai = new OpenAIApi(configuration)
+
+  console.log('Tokens used by this request: ' + encode(history.map(entry => entry.content).join('\n')).length)
 
   const response = await openai.createChatCompletion({
     model: 'gpt-3.5-turbo',
@@ -205,11 +214,29 @@ async function main() {
 
   const suggestedBranchName = `feature/${content.replace(/\s+/g, '-').toLowerCase()}`
 
+  if (!apiKey) {
+    console.error('Error: OPENAI_KEY not set.')
+    process.exit(1)
+  }
+
+  const repoFiles = await getRepoFiles()
+  //const codeSuggestionSpinner = ora('Generating code suggestions...').start()
+  const codeSuggestions = await generateBranchCode(
+    repoFiles,
+    apiKey,
+    content,
+    languages,
+    specialInstructions,
+    tokenLimit
+  )
+  //codeSuggestionSpinner.succeed('Code suggestions generated.')
+
   const { confirmed, branchName } = await inquirer.prompt([
     {
       type: 'input',
       name: 'branchName',
-      message: `Suggested branch name is "${suggestedBranchName}". Press Enter to accept or type a new name:`,
+      message: `Code suggestions are ready. I suggest we check out the branch name "${suggestedBranchName}". 
+      Press Enter to accept or type a new name:`,
       default: suggestedBranchName
     },
     {
@@ -228,24 +255,6 @@ async function main() {
   const branchCreationSpinner = ora(`Creating branch "${branchName}"...`).start()
   await checkOutBranch(branchName)
   branchCreationSpinner.succeed(`Branch "${branchName}" created.`)
-
-  if (!apiKey) {
-    console.error('Error: OPENAI_KEY not set.')
-    process.exit(1)
-  }
-
-  const repoFiles = await getRepoFiles()
-  //const codeSuggestionSpinner = ora('Generating code suggestions...').start()
-  const codeSuggestions = await generateBranchCode(
-    repoFiles,
-    apiKey,
-    content,
-    languages,
-    specialInstructions,
-    tokenLimit
-  )
-  //codeSuggestionSpinner.succeed('Code suggestions generated.')
-
   const applyCodeSuggestionsSpinner = ora('Applying code suggestions...').start()
 
   try {
@@ -253,70 +262,15 @@ async function main() {
   } catch (e) {
     applyCodeSuggestionsSpinner.fail('Code suggestions could not be applied.')
     console.error('This usually happens if chatGPT fails to return a properly formatted response. Please try again.')
+    console.error('here is the code suggestions response in RAW format:')
+    console.error(codeSuggestions)
     process.exit(1)
   }
 
   console.log('Branch setup complete. Happy coding!')
   ora('You can view the full conversation log in the log.txt file.').start()
+
   process.exit(0)
 }
 
 main()
-
-const cutFileContent = async (apiKey: string, fileContent: string) => {
-  //send the file content to GPT-3 and query it for the individual function blocks.
-  const { response } = await chatGptRequest(apiKey, [
-    {
-      role: 'system',
-      content:
-        'You are a code block extractor. The user sends you code or markdown in a string and you return each function or section you identify as a separate code block.'
-    },
-    {
-      role: 'user',
-      content:
-        'I will now send you a file. Please use your best judgment to split it into meaningful chunks. If it is code, return each function as a block. If it is markdown, return each section as a code block.'
-    },
-    { role: 'assistant', content: 'OK' },
-    { role: 'user', content: fileContent }
-  ])
-
-  //parse the response into an array of code blocks
-  const codeBlocks = parseCodeBlocks(response) as string[]
-  return codeBlocks
-}
-
-const parseCodeBlocks = (response: string) => {
-  //every code block is encapsulated by three backticks - we use a regex to find all of them
-
-  const codeBlockRegex = /```[\s\S]*?```/g
-  const codeBlocks = response.match(codeBlockRegex)
-
-  //if no code blocks were found, return an empty array
-  if (!codeBlocks) {
-    return []
-  }
-
-  //remove the three backticks from the start and end of each code block - also remove the first line of each code block
-  let blocks = codeBlocks.map(block => block.slice(3, -3)).map(block => block.split('\n').slice(1).join('\n'))
-
-  return blocks
-}
-
-//function to try and find the function name via regex - if it fails, return the first line of the function
-const getFunctionName = (codeBlock: string) => {
-  //regex to find line up until the first opening parenthesis
-  const functionNameRegex = /.*?(?=\()/g
-  const functionName = codeBlock.match(functionNameRegex)
-
-  //if the regex failed, return the first line of the function
-  if (!functionName) {
-    return codeBlock.split('\n')[0]
-  }
-
-  //if there's an equal sign in the function name, it's an arrow function. Clean it up.
-  if (functionName[0].includes('=')) {
-    return functionName[0].split('=')[0].trim()
-  }
-
-  return functionName[0]
-}

@@ -2,7 +2,7 @@ const fileListPrompt = (list: string) => `The repository contains the following 
   
 ${list}. 
 
-Please reply only with a non formatted comma separeted list of the files you deem interesting for the task`
+reply ONLY with comma separated list of file names you want to receive.`
 
 const initialSystemInstruction = `You are a code block producer assistant. 
 The user will ask you to return code and replies in specific formats and you will comply.
@@ -39,7 +39,7 @@ const getSuggestionsPrompt = (
     ...
     ]
     
-    
+    Do not suggest any changes to existing files. Only suggest new files to be created.
    reply ONLY with a code block containing this JSON array 
     `
 
